@@ -184,11 +184,11 @@ func setupVethPair(sysctl sysctl.Sysctl, name, peerName string) error {
 	if _, err := netlink.LinkByName(name); err != nil {
 		hostMac, err := mac.GenerateRandMAC()
 		if err != nil {
-			return err
+			return fmt.Errorf("setupVethPair failed to generate MAC for host %q: %w", name, err)
 		}
 		peerMac, err := mac.GenerateRandMAC()
 		if err != nil {
-			return err
+			return fmt.Errorf("setupVethPair failed to generate MAC for peer %q: %w", peerName, err)
 		}
 
 		veth := &netlink.Veth{
@@ -201,23 +201,23 @@ func setupVethPair(sysctl sysctl.Sysctl, name, peerName string) error {
 			PeerHardwareAddr: net.HardwareAddr(peerMac),
 		}
 		if err := netlink.LinkAdd(veth); err != nil {
-			return err
+			return fmt.Errorf("setupVethPair failed to add veth between host %q and peer %q: %w", name, peerName, err)
 		}
 	}
 
 	veth, err := netlink.LinkByName(name)
 	if err != nil {
-		return err
+		return fmt.Errorf("setupVethPair failed to generate link for host %q: %w", name, err)
 	}
 	if err := enableForwarding(sysctl, veth); err != nil {
-		return err
+		return fmt.Errorf("setupVethPair failed to enable forwarding for host %q: %w", name, err)
 	}
 	peer, err := netlink.LinkByName(peerName)
 	if err != nil {
-		return err
+		return fmt.Errorf("setupVethPair failed to generate link for peer %q: %w", peerName, err)
 	}
 	if err := enableForwarding(sysctl, peer); err != nil {
-		return err
+		return fmt.Errorf("setupVethPair failed to enable forwarding for peer %q: %w", peerName, err)
 	}
 
 	return nil
@@ -231,28 +231,30 @@ func setupBaseDevice(sysctl sysctl.Sysctl, mtu int) (netlink.Link, netlink.Link,
 	if err := setupVethPair(sysctl, defaults.HostDevice, defaults.SecondHostDevice); err != nil {
 		return nil, nil, err
 	}
+	name := defaults.HostDevice
+	peerName := defaults.SecondHostDevice
 
-	linkHost, err := netlink.LinkByName(defaults.HostDevice)
+	linkHost, err := netlink.LinkByName(name)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("setupBaseDevice failed to generate link for host %q: %w", name, err)
 	}
 	linkNet, err := netlink.LinkByName(defaults.SecondHostDevice)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("setupBaseDevice failed to generate link for peer %q: %w", peerName, err)
 	}
 
 	if err := netlink.LinkSetARPOff(linkHost); err != nil {
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("setupBaseDevice failed to set ARP off for host %q: %w", name, err)
 	}
 	if err := netlink.LinkSetARPOff(linkNet); err != nil {
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("setupBaseDevice failed to set ARP off for peer %q: %w", peerName, err)
 	}
 
 	if err := netlink.LinkSetMTU(linkHost, mtu); err != nil {
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("setupBaseDevice failed to set MTU %d for host %q: %w", mtu, name, err)
 	}
 	if err := netlink.LinkSetMTU(linkNet, mtu); err != nil {
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("setupBaseDevice failed to set MTU %d for peer %q: %w", mtu, peerName, err)
 	}
 
 	return linkHost, linkNet, nil
